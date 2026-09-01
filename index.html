@@ -701,6 +701,7 @@ function uyariBandiGoster(){ if(!LS.get('dk_uyari_gorundu',false)){ document.get
    MODEL KEŞFİ + GEMINI (akışlı)
    ============================================================ */
 let AKTIF_MODEL = LS.get('dk_model', null);
+if(AKTIF_MODEL && /(^gemini-1\.|^gemini-pro$|^chat-bison|^text-bison|^gemini-1\.5)/.test(AKTIF_MODEL)){ AKTIF_MODEL=null; LS.del('dk_model'); } // emekli modelleri temizle -> ilk çağrıda otomatik keşfedilir
 const MODEL_TERCIH = ['gemini-2.5-flash','gemini-2.0-flash','gemini-2.5-flash-lite','gemini-flash-latest','gemini-2.5-pro'];
 function kanonik(ad){ return ad.replace('gemini-flash-latest','gemini-2.5-flash').replace('gemini-pro-latest','gemini-2.5-pro'); }
 
@@ -723,7 +724,7 @@ async function modelKesfet(force){
 }
 
 function hataTurkce(status, txt){
-  if(status===404) return 'Model bulunamadı (404). Ayarlar’dan modeli yenileyin.';
+  if(status===404) return 'Uygun model bulunamadı (404). Anahtarın Generative Language API erişimini Ayarlar’dan kontrol edin.';
   if(status===429) return 'Kota doldu (429). Başka anahtar deneniyor veya biraz sonra tekrar deneyin.';
   if(status===503) return 'Sunucu meşgul (503). Birazdan tekrar denenecek.';
   if(status===400 && /API key/i.test(txt||'')) return 'Anahtar geçersiz (400). Ayarlar’dan kontrol edin.';
@@ -734,7 +735,8 @@ function hataTurkce(status, txt){
 /* Akışlı üretim: onChunk parça parça çağrılır */
 async function generateText(prompt, {onChunk, sistem}={}){
   const ks=keyler(); if(!ks.length) throw new Error('Önce ⚙️ Ayarlar’dan ücretsiz Gemini API anahtarı girin.');
-  const model=await modelKesfet(false);
+  let model=await modelKesfet(false);
+  let modelTazelendi=false;
   const body={
     contents:[{role:'user',parts:[{text:prompt}]}],
     generationConfig:{ temperature:0.9, topP:0.95, maxOutputTokens:2048, thinkingConfig:{thinkingBudget:0} }
@@ -750,6 +752,7 @@ async function generateText(prompt, {onChunk, sistem}={}){
         const t=await r.text().catch(()=> '');
         sonHata=hataTurkce(r.status,t);
         if(r.status===400 && /thinkingConfig|responseModalities/i.test(t)){ delete body.generationConfig.thinkingConfig; continue; }
+        if(r.status===404 && !modelTazelendi){ modelTazelendi=true; try{ model=await modelKesfet(true); }catch(e){ sonHata=e.message||sonHata; } continue; } // model emekli -> güncel modeli otomatik bul ve tekrar dene
         if(r.status===429||r.status===503) continue; // başka anahtar
         // akış olmazsa non-stream'e düş
         return await generateTextNonStream(prompt, sistem, key, model);
@@ -778,7 +781,9 @@ async function generateTextNonStream(prompt, sistem, key, model){
   if(sistem) body.systemInstruction={parts:[{text:sistem}]};
   const url='https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+encodeURIComponent(key);
   const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  if(!r.ok){ const t=await r.text().catch(()=> ''); throw new Error(hataTurkce(r.status,t)); }
+  if(!r.ok){ const t=await r.text().catch(()=> '');
+    if(r.status===404){ try{ const m2=await modelKesfet(true); if(m2 && m2!==model) return await generateTextNonStream(prompt, sistem, key, m2); }catch(e){} }
+    throw new Error(hataTurkce(r.status,t)); }
   const d=await r.json(); return (d?.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('');
 }
 
