@@ -705,8 +705,10 @@ if(AKTIF_MODEL && /(^gemini-1\.|^gemini-1\.5|^gemini-2\.|^gemini-pro$|^chat-biso
 const MODEL_TERCIH = ['gemini-flash-latest','gemini-3.5-flash','gemini-3.7-flash','gemini-3.6-flash','gemini-3-flash','gemini-3.1-flash-lite','gemini-2.5-flash','gemini-2.5-flash-lite'];
 function kanonik(ad){ return ad; }
 
-async function modelKesfet(force){
-  if(AKTIF_MODEL && !force) return AKTIF_MODEL;
+const bekle=ms=>new Promise(r=>setTimeout(r,ms));
+let KESIF_LISTE=null;   // oturum içi model listesi (tercihe göre sıralı) — kota israfı olmasın diye önbelleklenir
+async function modelListesiGetir(force){
+  if(KESIF_LISTE && KESIF_LISTE.length && !force) return KESIF_LISTE;
   const ks=keyler(); if(!ks.length) throw new Error('NO_KEY');
   const key=ks[0];
   const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?key='+encodeURIComponent(key), {headers:{'x-goog-api-key':key}});
@@ -716,10 +718,17 @@ async function modelKesfet(force){
     .filter(m=>(m.supportedGenerationMethods||[]).includes('generateContent'))
     .map(m=>m.name.replace('models/',''))
     .filter(n=>/gemini/.test(n) && !/vision|embedding|aqa|imagen/.test(n));
-  let sec=null;
-  for(const t of MODEL_TERCIH){ const bul=uygun.find(n=>kanonik(n)===t||n===t); if(bul){sec=bul;break;} }
-  if(!sec) sec=uygun.find(n=>/^gemini-flash-latest$/.test(n)) || uygun.find(n=>/gemini-3.*flash/.test(n)) || uygun.find(n=>/flash/.test(n) && !/gemini-[012]/.test(n)) || uygun.find(n=>/flash/.test(n)) || uygun[0];
-  if(!sec) throw new Error('MODEL_YOK');
+  const sirali=[];
+  for(const t of MODEL_TERCIH){ const b=uygun.find(n=>n===t); if(b && !sirali.includes(b)) sirali.push(b); }
+  uygun.filter(n=>/flash/.test(n) && !/gemini-[012]/.test(n) && !sirali.includes(n)).forEach(n=>sirali.push(n));
+  uygun.filter(n=>!sirali.includes(n)).forEach(n=>sirali.push(n));
+  KESIF_LISTE = sirali.length ? sirali : uygun;
+  return KESIF_LISTE;
+}
+async function modelKesfet(force){
+  if(AKTIF_MODEL && !force) return AKTIF_MODEL;
+  const liste=await modelListesiGetir(force);
+  const sec=liste[0]; if(!sec) throw new Error('MODEL_YOK');
   AKTIF_MODEL=sec; LS.set('dk_model',sec); return sec;
 }
 
@@ -735,56 +744,74 @@ function hataTurkce(status, txt){
 /* Akışlı üretim: onChunk parça parça çağrılır */
 async function generateText(prompt, {onChunk, sistem}={}){
   const ks=keyler(); if(!ks.length) throw new Error('Önce ⚙️ Ayarlar’dan ücretsiz Gemini API anahtarı girin.');
-  let model=await modelKesfet(false);
-  let modelTazelendi=false;
+  // ZİRVE model zinciri: çalışan modeli otomatik bulur, gerekirse sıradakine sessizce düşer
+  let liste=[]; try{ liste=await modelListesiGetir(false); }catch(e){}
+  let birincil = AKTIF_MODEL || (liste[0]||'gemini-flash-latest');
+  let zincir;
+  if(liste.length){
+    if(liste.includes(birincil)){ zincir=[birincil, ...liste.filter(m=>m!==birincil)]; }
+    else { const eski=birincil; birincil=liste[0]; zincir=liste.slice(); AKTIF_MODEL=birincil; LS.set('dk_model',birincil); if(eski && typeof toast==='function') toast('⚡ Otomatik model seçildi: '+birincil,'ok'); }
+  } else { zincir=[birincil]; }
   const body={
     contents:[{role:'user',parts:[{text:prompt}]}],
     generationConfig:{ temperature:0.9, topP:0.95, maxOutputTokens:2048, thinkingConfig:{thinkingBudget:0} }
   };
   if(sistem){ body.systemInstruction={parts:[{text:sistem}]}; }
   let sonHata='';
-  for(let deneme=0; deneme<Math.min(ks.length,4)+1; deneme++){
-    const key=siradakiKey();
-    try{
-      const url='https://generativelanguage.googleapis.com/v1beta/models/'+model+':streamGenerateContent?alt=sse&key='+encodeURIComponent(key);
-      const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body)});
-      if(!r.ok){
-        const t=await r.text().catch(()=> '');
-        sonHata=hataTurkce(r.status,t);
-        if(r.status===400 && /thinkingConfig|responseModalities/i.test(t)){ delete body.generationConfig.thinkingConfig; continue; }
-        if(r.status===404 && !modelTazelendi){ modelTazelendi=true; try{ model=await modelKesfet(true); }catch(e){ sonHata=e.message||sonHata; } continue; } // model emekli -> güncel modeli otomatik bul ve tekrar dene
-        if(r.status===429||r.status===503) continue; // başka anahtar
-        // akış olmazsa non-stream'e düş
-        return await generateTextNonStream(prompt, sistem, key, model);
-      }
-      if(!r.body) return await generateTextNonStream(prompt, sistem, key, model);
-      const reader=r.body.getReader(); const dec=new TextDecoder(); let buf='',tam='';
-      while(true){
-        const {value,done}=await reader.read(); if(done) break;
-        buf+=dec.decode(value,{stream:true});
-        const parts=buf.split('\n'); buf=parts.pop();
-        for(const line of parts){
-          const l=line.trim(); if(!l.startsWith('data:')) continue;
-          const js=l.slice(5).trim(); if(js==='[DONE]'||!js) continue;
-          try{ const o=JSON.parse(js); const p=o?.candidates?.[0]?.content?.parts||[]; const par=p.map(x=>x.text||'').join('');
-            if(par){ tam+=par; onChunk&&onChunk(tam,par); } }catch(e){}
+  for(let mi=0; mi<zincir.length; mi++){
+    let model=zincir[mi]; let modelBitti=false;
+    for(let deneme=0; deneme<Math.min(ks.length,3)+1 && !modelBitti; deneme++){
+      const key=siradakiKey();
+      try{
+        const url='https://generativelanguage.googleapis.com/v1beta/models/'+model+':streamGenerateContent?alt=sse&key='+encodeURIComponent(key);
+        const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body)});
+        if(!r.ok){
+          const t=await r.text().catch(()=> '');
+          sonHata=hataTurkce(r.status,t);
+          if(r.status===400 && /thinkingConfig|responseModalities/i.test(t)){ delete body.generationConfig.thinkingConfig; continue; }
+          if(r.status===404){ modelBitti=true; break; }                 // bu model bu anahtarda yok -> sıradaki modele geç
+          if(r.status===429||r.status===503||r.status===500||r.status===502){ await bekle(700*(deneme+1)); continue; } // geçici -> bekle + tekrar dene
+          const ns=await generateTextNonStream(prompt, sistem, key, model); if(ns) return ns; modelBitti=true; break;
         }
-      }
-      if(tam) return tam;
-      sonHata='Boş cevap döndü.';
-    }catch(e){ sonHata=e.message||'Ağ hatası'; }
+        if(!r.body){ const ns=await generateTextNonStream(prompt, sistem, key, model); if(ns) return ns; modelBitti=true; break; }
+        const reader=r.body.getReader(); const dec=new TextDecoder(); let buf='',tam='';
+        while(true){
+          const {value,done}=await reader.read(); if(done) break;
+          buf+=dec.decode(value,{stream:true});
+          const parts=buf.split('\n'); buf=parts.pop();
+          for(const line of parts){
+            const l=line.trim(); if(!l.startsWith('data:')) continue;
+            const js=l.slice(5).trim(); if(js==='[DONE]'||!js) continue;
+            try{ const o=JSON.parse(js); const p=o?.candidates?.[0]?.content?.parts||[]; const par=p.map(x=>x.text||'').join('');
+              if(par){ tam+=par; onChunk&&onChunk(tam,par); } }catch(e){}
+          }
+        }
+        if(tam){ if(mi>0 && typeof toast==='function') toast('⚡ Otomatik seçildi: '+model,'ok'); return tam; }
+        sonHata='Boş cevap döndü.';
+      }catch(e){ sonHata=e.message||'Ağ hatası'; }
+    }
   }
   throw new Error(sonHata||'Cevap alınamadı.');
 }
 async function generateTextNonStream(prompt, sistem, key, model){
   const body={contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.9,maxOutputTokens:2048}};
   if(sistem) body.systemInstruction={parts:[{text:sistem}]};
-  const url='https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+encodeURIComponent(key);
-  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body)});
-  if(!r.ok){ const t=await r.text().catch(()=> '');
-    if(r.status===404){ try{ const m2=await modelKesfet(true); if(m2 && m2!==model) return await generateTextNonStream(prompt, sistem, key, m2); }catch(e){} }
-    throw new Error(hataTurkce(r.status,t)); }
-  const d=await r.json(); return (d?.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('');
+  let liste=[]; try{ liste=await modelListesiGetir(false); }catch(e){}
+  const zincir = (liste.length ? [model, ...liste.filter(m=>m!==model)] : [model]);
+  let sonHata='';
+  for(let mi=0; mi<zincir.length; mi++){
+    const m=zincir[mi];
+    for(let d2=0; d2<2; d2++){
+      const url='https://generativelanguage.googleapis.com/v1beta/models/'+m+':generateContent?key='+encodeURIComponent(key);
+      const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body)});
+      if(r.ok){ const dd=await r.json(); const tx=(dd?.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join(''); if(mi>0 && tx && typeof toast==='function') toast('⚡ Otomatik seçildi: '+m,'ok'); return tx; }
+      const t=await r.text().catch(()=> ''); sonHata=hataTurkce(r.status,t);
+      if(r.status===404) break;
+      if(r.status===429||r.status===503||r.status===500||r.status===502){ await bekle(700*(d2+1)); continue; }
+      break;
+    }
+  }
+  throw new Error(sonHata||'Cevap alınamadı.');
 }
 
 /* Anahtar testi — RING'i atlar, orijinal fetch ile Google'a sorar */
