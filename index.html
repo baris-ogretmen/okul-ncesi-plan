@@ -701,9 +701,9 @@ function uyariBandiGoster(){ if(!LS.get('dk_uyari_gorundu',false)){ document.get
    MODEL KEŞFİ + GEMINI (akışlı)
    ============================================================ */
 let AKTIF_MODEL = LS.get('dk_model', null);
-if(AKTIF_MODEL && /(^gemini-1\.|^gemini-pro$|^chat-bison|^text-bison|^gemini-1\.5)/.test(AKTIF_MODEL)){ AKTIF_MODEL=null; LS.del('dk_model'); } // emekli modelleri temizle -> ilk çağrıda otomatik keşfedilir
-const MODEL_TERCIH = ['gemini-2.5-flash','gemini-2.0-flash','gemini-2.5-flash-lite','gemini-flash-latest','gemini-2.5-pro'];
-function kanonik(ad){ return ad.replace('gemini-flash-latest','gemini-2.5-flash').replace('gemini-pro-latest','gemini-2.5-pro'); }
+if(AKTIF_MODEL && /(^gemini-1\.|^gemini-1\.5|^gemini-2\.|^gemini-pro$|^chat-bison|^text-bison)/.test(AKTIF_MODEL)){ AKTIF_MODEL=null; LS.del('dk_model'); } // emekli modelleri temizle -> ilk çağrıda otomatik keşfedilir
+const MODEL_TERCIH = ['gemini-flash-latest','gemini-3.5-flash','gemini-3.7-flash','gemini-3.6-flash','gemini-3-flash','gemini-3.1-flash-lite','gemini-2.5-flash','gemini-2.5-flash-lite'];
+function kanonik(ad){ return ad; }
 
 async function modelKesfet(force){
   if(AKTIF_MODEL && !force) return AKTIF_MODEL;
@@ -718,7 +718,7 @@ async function modelKesfet(force){
     .filter(n=>/gemini/.test(n) && !/vision|embedding|aqa|imagen/.test(n));
   let sec=null;
   for(const t of MODEL_TERCIH){ const bul=uygun.find(n=>kanonik(n)===t||n===t); if(bul){sec=bul;break;} }
-  if(!sec) sec=uygun.find(n=>/flash/.test(n)) || uygun[0];
+  if(!sec) sec=uygun.find(n=>/^gemini-flash-latest$/.test(n)) || uygun.find(n=>/gemini-3.*flash/.test(n)) || uygun.find(n=>/flash/.test(n) && !/gemini-[012]/.test(n)) || uygun.find(n=>/flash/.test(n)) || uygun[0];
   if(!sec) throw new Error('MODEL_YOK');
   AKTIF_MODEL=sec; LS.set('dk_model',sec); return sec;
 }
