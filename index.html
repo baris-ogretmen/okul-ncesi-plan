@@ -1263,6 +1263,14 @@ function ayarAc(sek){
           <button class="btn y" onclick="keyTest()">🧪 Anahtarları Test Et</button>
         </div>
         <div class="saglik" id="saglikPan"></div>
+        <label class="fl" style="margin-top:14px">Model (isteğe bağlı — boş bırakırsan otomatik bulunur):</label>
+        <input class="key" id="modelKutu" placeholder="Otomatik — ör. gemini-2.5-flash" value="${AKTIF_MODEL||''}">
+        <div class="btnsira">
+          <button class="btn p" onclick="modelKaydet()">💾 Modeli Kaydet</button>
+          <button class="btn g" onclick="modelOtomatik()">🔍 Otomatik Bul</button>
+          <button class="btn y" onclick="uretimDene()">🧪 Üretimi Dene</button>
+        </div>
+        <div class="saglik" id="uretimSonuc"></div>
         <div class="rehber">
           <b>Ücretsiz anahtar nasıl alınır?</b>
           <ol>
@@ -1294,6 +1302,23 @@ function ayarAc(sek){
   if(sek==='dugmeler'){ $('#ayarModalIc .ay-sek button[data-s=dugmeler]').click(); }
 }
 function keyKaydet(){ const arr=$('#keyBox').value.split('\n').map(s=>s.trim()).filter(s=>s.length>10); const tekil=[...new Set(arr)]; LS.set('dk_keys',tekil); RING=tekil; AKTIF_MODEL=null; LS.del('dk_model'); toast('💾 '+tekil.length+' anahtar kaydedildi','ok'); }
+function modelKaydet(){ const v=(($('#modelKutu')||{}).value||'').trim(); if(v){ AKTIF_MODEL=v; LS.set('dk_model',v); toast('💾 Model: '+v,'ok'); } else { AKTIF_MODEL=null; LS.del('dk_model'); toast('Model otomatik moda alındı','ok'); } }
+async function modelOtomatik(){ const el=$('#uretimSonuc'); el.innerHTML='🔍 Aranıyor…'; try{ const m=await modelKesfet(true); if($('#modelKutu'))$('#modelKutu').value=m; el.innerHTML='✅ Bulunan model: <b>'+m+'</b>'; }catch(e){ el.innerHTML='🔴 '+(e.message||'bulunamadı'); } }
+async function uretimDene(){
+  const el=$('#uretimSonuc'); const ks=keyler(); if(!ks.length){ el.innerHTML='🔴 Önce bir anahtar gir ve Kaydet.'; return; }
+  const key=ks[0]; let model=(($('#modelKutu')||{}).value||'').trim()||AKTIF_MODEL;
+  el.innerHTML='🧪 Üretim deneniyor…';
+  try{ if(!model){ model=await modelKesfet(true); if($('#modelKutu'))$('#modelKutu').value=model; } }catch(e){ el.innerHTML='🔴 Model listelenemedi (HTTP): '+(e.message||''); return; }
+  try{
+    const url='https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+encodeURIComponent(key);
+    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify({contents:[{parts:[{text:'merhaba'}]}]})});
+    const t=await r.text().catch(()=> '');
+    if(r.ok){ el.innerHTML='✅ <b>Üretim çalışıyor!</b> Model: '+model+'. Anahtar sorunsuz — asistan artık cevap verir.'; return; }
+    let reason='',msg='';
+    try{ const j=JSON.parse(t); msg=(j.error&&j.error.message)||''; reason=(j.error&&j.error.status)||''; const det=(j.error&&j.error.details)||[]; for(const d of det){ if(d.reason) reason=d.reason; } }catch(e){ msg=(t||'').slice(0,180); }
+    el.innerHTML='🔴 <b>HTTP '+r.status+'</b>'+(reason?(' · '+reason):'')+'<br><span style="opacity:.75;font-size:12px">'+((msg||'').replace(/</g,'&lt;')).slice(0,220)+'</span>';
+  }catch(e){ el.innerHTML='🔴 Bağlantı/CORS hatası: '+((e.message||'').replace(/</g,'&lt;')); }
+}
 function keyKopyala(){ navigator.clipboard.writeText(keyler().join('\n')).then(()=>toast('📋 Anahtarlar kopyalandı','ok')); }
 async function keyYapistir(){ try{ const t=await navigator.clipboard.readText(); const yeni=t.split('\n').map(s=>s.trim()).filter(s=>s.length>10); const birlesik=[...new Set([...keyler(),...yeni])]; $('#keyBox').value=birlesik.join('\n'); LS.set('dk_keys',birlesik); RING=birlesik; toast('📥 Yapıştırıldı ('+yeni.length+' yeni)','ok'); }catch(e){ toast('Pano okunamadı','err'); } }
 async function keyTest(){
