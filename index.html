@@ -754,12 +754,12 @@ async function generateText(prompt, {onChunk, sistem}={}){
   } else { zincir=[birincil]; }
   const body={
     contents:[{role:'user',parts:[{text:prompt}]}],
-    generationConfig:{ temperature:0.9, topP:0.95, maxOutputTokens:2048, thinkingConfig:{thinkingBudget:0} }
+    generationConfig:{ temperature:0.9, topP:0.95, maxOutputTokens:8192, thinkingConfig:{thinkingBudget:0} }
   };
   if(sistem){ body.systemInstruction={parts:[{text:sistem}]}; }
   let sonHata='';
   for(let mi=0; mi<zincir.length; mi++){
-    let model=zincir[mi]; let modelBitti=false;
+    let model=zincir[mi]; let modelBitti=false; let uzatma=0;
     for(let deneme=0; deneme<Math.min(ks.length,3)+1 && !modelBitti; deneme++){
       const key=siradakiKey();
       try{
@@ -774,7 +774,7 @@ async function generateText(prompt, {onChunk, sistem}={}){
           const ns=await generateTextNonStream(prompt, sistem, key, model); if(ns) return ns; modelBitti=true; break;
         }
         if(!r.body){ const ns=await generateTextNonStream(prompt, sistem, key, model); if(ns) return ns; modelBitti=true; break; }
-        const reader=r.body.getReader(); const dec=new TextDecoder(); let buf='',tam='';
+        const reader=r.body.getReader(); const dec=new TextDecoder(); let buf='',tam='',bitisNedeni='';
         while(true){
           const {value,done}=await reader.read(); if(done) break;
           buf+=dec.decode(value,{stream:true});
@@ -782,11 +782,11 @@ async function generateText(prompt, {onChunk, sistem}={}){
           for(const line of parts){
             const l=line.trim(); if(!l.startsWith('data:')) continue;
             const js=l.slice(5).trim(); if(js==='[DONE]'||!js) continue;
-            try{ const o=JSON.parse(js); const p=o?.candidates?.[0]?.content?.parts||[]; const par=p.map(x=>x.text||'').join('');
+            try{ const o=JSON.parse(js); const fr=o?.candidates?.[0]?.finishReason; if(fr) bitisNedeni=fr; const p=o?.candidates?.[0]?.content?.parts||[]; const par=p.map(x=>x.text||'').join('');
               if(par){ tam+=par; onChunk&&onChunk(tam,par); } }catch(e){}
           }
         }
-        if(tam){ if(mi>0 && typeof toast==='function') toast('⚡ Otomatik seçildi: '+model,'ok'); return tam; }
+        if(tam){ if(bitisNedeni==='MAX_TOKENS' && uzatma<1){ uzatma++; body.generationConfig.maxOutputTokens=16384; deneme--; continue; } if(mi>0 && typeof toast==='function') toast('⚡ Otomatik seçildi: '+model,'ok'); return tam; }
         sonHata='Boş cevap döndü.';
       }catch(e){ sonHata=e.message||'Ağ hatası'; }
     }
@@ -794,7 +794,7 @@ async function generateText(prompt, {onChunk, sistem}={}){
   throw new Error(sonHata||'Cevap alınamadı.');
 }
 async function generateTextNonStream(prompt, sistem, key, model){
-  const body={contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.9,maxOutputTokens:2048}};
+  const body={contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.9,maxOutputTokens:8192}};
   if(sistem) body.systemInstruction={parts:[{text:sistem}]};
   let liste=[]; try{ liste=await modelListesiGetir(false); }catch(e){}
   const zincir = (liste.length ? [model, ...liste.filter(m=>m!==model)] : [model]);
