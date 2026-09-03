@@ -847,6 +847,25 @@ function temizleLatex(s){
     .replace(/\$([^$]+)\$/g,'$1').replace(/\\[()\[\]]/g,'');
 }
 function esc(s){ return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function izleKaynaklari(konu, dersAd){
+  const q=encodeURIComponent, k=String(konu||'').trim(), dd=String(dersAd||'').trim();
+  const yt=t=>'https://www.youtube.com/results?search_query='+q(t);
+  const g =t=>'https://www.google.com/search?q='+q(t);
+  const gi=t=>'https://www.google.com/search?tbm=isch&q='+q(t);
+  const R=[
+    ['🎬','Çizgi film / animasyon', yt(k+' çizgi film animasyon çocuk')],
+    ['🎵','Şarkı / tekerleme', yt(k+' şarkı çocuk')],
+    ['🧑‍🏫','Konu anlatımı', yt(k+' '+dd+' konu anlatımı')],
+    ['🎨','Etkinlik videosu', yt(k+' etkinlik')],
+    ['❓','Soru / çalışma kağıdı', g(k+' '+dd+' etkinlik çalışma kağıdı pdf')],
+    ['🖍️','Boyama sayfası', g(k+' boyama sayfası pdf')],
+    ['🖼️','Görseller', gi(k+' '+dd)],
+    ['📺','TRT Çocuk', 'https://www.trtcocuk.net.tr/'],
+    ['📚','EBA', 'https://www.eba.gov.tr/'],
+    ['🦉','Khan Academy TR', 'https://tr.khanacademy.org/']
+  ];
+  return R.map(r=>'<a class="arac-cip" href="'+r[2]+'" target="_blank" rel="noopener"><span class="ik">'+r[0]+'</span>'+r[1]+'</a>').join('');
+}
 /* Küçük ama sağlam markdown → HTML */
 function md(src){
   if(!src) return '';
@@ -981,7 +1000,7 @@ function konuAI(t){
   const on={anlat:`"${d.ad}" dersini bu yıllık planda hangi araçlarla ve hangi sırayla işlediğimi öğretmen gözünden kısa ve renkli anlat.`,
     veli:`Bir veli toplantısında "${d.ad}" dersinin çocuklara ne kazandırdığını sıcak, teknik olmayan bir dille anlat. 1 paragraf + evde 1 öneri.`,
     proje:`"${d.ad}" dersi için yaş grubuna göre (0-3 ve 3-6 yaş) 3 farklı, uygulanabilir proje fikri öner.`}[t];
-  const sistem=`Sen "Okul Öncesi Yıllık Eğitim Planı" asistanısın. KISA, NET, TÜRKÇE, uygulanabilir yaz. Somut örnek + akılda kalıcı anlatım. Renkli vurgu için <span style="color:#RENK;font-weight:700">. LaTeX yok, ok için →. Tablo en fazla 3 sütun.`;
+  const sistem=`Sen "Okul Öncesi Yıllık Eğitim Planı" asistanısın. KISA, NET, TÜRKÇE, uygulanabilir yaz. Somut örnek + akılda kalıcı anlatım. Renkli Renk kodu/HTML/<span> yazma; **kalın** ile vurgula. LaTeX yok, ok için →. Tablo en fazla 3 sütun.`;
   modalKapat('konuModal');
   aiSor(on,{sistem,on:`[Ders: ${d.ad}. Kapsam: ${kd.ozet}]\n\n${on}`,baslik:d.ad});
 }
@@ -1066,6 +1085,7 @@ function haftaAc(i){
       <div class="blok"><div class="bh">🎯 Kazanım</div><div class="bt">${w.z}</div></div>
       <div class="blok"><div class="bh">🧩 Etkinlik</div><div class="bt">${w.e}</div></div>
       <div class="blok"><div class="bh">🧰 Bu Düzey İçin Araçlar</div><div class="arac-satir">${araclar||'<span style="color:var(--soluk)">Bu hafta ekransız/materyal ağırlıklı.</span>'}</div></div>
+      <div class="blok"><div class="bh">🎬 İzle & Kaynaklar <span style="font-weight:600;color:var(--soluk);font-size:12px">(tıkla → açılır)</span></div><div class="arac-satir">${izleKaynaklari(konu, d.ad)}</div></div>
       <div class="blok"><div class="bh">📦 Materyal</div><div class="bt">${w.m}</div></div>
       <div class="blok"><div class="uy-kutu">🧭 <b>${dz.ad} uyarlaması:</b> ${DUZEY_YAKLASIM[lv].replace(/<\/?b>/g,'')}</div></div>
       <div class="blok">
@@ -1093,7 +1113,7 @@ function haftaAI(tip){
     materyal:`Bu haftayı işlemek için gereken tüm materyallerin (fiziksel + dijital) toplu bir kontrol listesini çıkar. Ucuz/ücretsiz alternatifleri de belirt.`,
     ders:`Bu hafta için 40 dakikalık tek ders saatlik akış planla: giriş (ısınma) → geliştirme (ana etkinlik) → uygulama → kapanış/değerlendirme. Her aşamaya süre yaz.`
   };
-  const sistem=`Sen "Okul Öncesi Yıllık Eğitim Planı" öğretmen asistanısın. Okul öncesi öğretmenine yardımcı ol. KISA, NET, TÜRKÇE ve doğrudan uygulanabilir yaz. Verilen bağlama sadık kal, uydurma. Somut örnek ve akılda kalıcı anlatım kullan. Renkli vurgu gerekiyorsa <span style="color:#RENK;font-weight:700"> kullan. Matematik/LaTeX yazma; ok için → kullan. Tablo gerekiyorsa en fazla 3 sütun.`;
+  const sistem=`Sen "Okul Öncesi Yıllık Eğitim Planı" öğretmen asistanısın. Okul öncesi öğretmenine yardımcı ol. KISA, NET, TÜRKÇE ve doğrudan uygulanabilir yaz. Verilen bağlama sadık kal, uydurma. Somut örnek ve akılda kalıcı anlatım kullan. Renk kodu/HTML/<span> yazma; **kalın** ile vurgula. Matematik/LaTeX yazma; ok için → kullan. Tablo gerekiyorsa en fazla 3 sütun.`;
   modalKapat('haftaModal');
   aiSor(istekler[tip], {sistem, on:`${baglam}\n\nGÖREV: ${istekler[tip]}`, baslik:`Hafta ${i+1} · ${konu}`});
 }
@@ -1170,7 +1190,7 @@ function asistanAc(){
 function asistanHizli(q){ $('#aiInput').value=q; asistanGonder(); }
 function asistanGonder(){
   const inp=$('#aiInput'); const q=inp.value.trim(); if(!q) return; inp.value=''; inp.style.height='auto';
-  const sistem=`Sen "Okul Öncesi Yıllık Eğitim Planı" asistanısın; okul öncesi öğretmenine yardımcı olursun. İşini HAFİFLET: KISA, NET, TÜRKÇE, uygulanabilir. YALNIZCA verilen duruma dayan, uydurma. Somut örnek + akılda kalıcı anlatım kullan. Renkli vurgu için <span style="color:#RENK;font-weight:700">. LaTeX yok, ok için →. Tablo en fazla 3 sütun.`;
+  const sistem=`Sen "Okul Öncesi Yıllık Eğitim Planı" asistanısın; okul öncesi öğretmenine yardımcı olursun. İşini HAFİFLET: KISA, NET, TÜRKÇE, uygulanabilir. YALNIZCA verilen duruma dayan, uydurma. Somut örnek + akılda kalıcı anlatım kullan. Renkli Renk kodu/HTML/<span> yazma; **kalın** ile vurgula. LaTeX yok, ok için →. Tablo en fazla 3 sütun.`;
   const on=`[Uygulama durumu: ${durumOzeti()}]\n\nÖğretmenin sorusu: ${q}`;
   aiSor(q, {sistem, on, ekle:true});
 }
@@ -1819,7 +1839,7 @@ function seansAI(tip){
     sorular:'Bu kazanımı ölçen, yaşa uygun 5 kısa değerlendirme sorusu üret (karışık) ve cevaplarını ver.',
     ders:'Bu ders için 40 dakikalık akış planla: giriş (ısınma) → geliştirme → uygulama → kapanış. Her aşamaya süre yaz.'
   }[tip];
-  const sistem='Sen okul öncesi yıllık eğitim planı asistanısın; okul öncesi öğretmenine yardımcı ol. KISA, NET, TÜRKÇE, uygulanabilir yaz. Somut örnek + akılda kalıcı anlatım. Renkli vurgu için <span style="color:#RENK;font-weight:700">. LaTeX yok, ok için →. Tablo en fazla 3 sütun.';
+  const sistem='Sen okul öncesi yıllık eğitim planı asistanısın; okul öncesi öğretmenine yardımcı ol. KISA, NET, TÜRKÇE, uygulanabilir yaz. Somut örnek + akılda kalıcı anlatım. Renkli Renk kodu/HTML/<span> yazma; **kalın** ile vurgula. LaTeX yok, ok için →. Tablo en fazla 3 sütun.';
   modalKapat('haftaModal');
   aiSor(istek,{sistem,on:baglam+' GÖREV: '+istek,baslik:'Ders '+(t.idx+1)+' · '+se.k});
 }
