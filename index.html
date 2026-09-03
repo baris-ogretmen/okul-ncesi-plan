@@ -435,7 +435,7 @@ input[type=date].key{color-scheme:dark}
     <div class="hero-top">
       <div class="logo">📘</div>
       <div style="min-width:0">
-        <div class="ustlbl">OKUL ÖNCESİ EĞİTİM · YILLIK PLAN · 2025–2026</div>
+        <div class="ustlbl">OKUL ÖNCESİ EĞİTİM · YILLIK PLAN · 2026–2027</div>
         <h1>Okul Öncesi Gelişim Atlası</h1>
         <div class="alt">Maarif Modeli · Bilişsel · Dil · Sosyal-Duygusal · Motor · Sanat</div>
       </div>
@@ -875,8 +875,9 @@ function md(src){
   kapatListe(); return out;
 }
 function inl(t){
-  // <span style> renk vurgularını KORU (AI çıktısı renklendirebilir)
-  const korunan=[]; t=t.replace(/<span style="[^"]*">.*?<\/span>/g,m=>{korunan.push(m);return '\u0000'+(korunan.length-1)+'\u0000';});
+  // AI bazen HTML/renk üretir; güvenli etiketleri (tam ya da yarım) KORU, gerisini kaçır ki ham etiket görünmesin
+  const korunan=[];
+  t=t.replace(/<\/?(?:span(?:\s+style="[^"]*")?|b|strong|i|em|u|br\s*\/?)>/gi,m=>{korunan.push(m);return '\u0000'+(korunan.length-1)+'\u0000';});
   t=esc(t);
   t=t.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/(^|[^*])\*([^*]+?)\*/g,'$1<em>$2</em>').replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
   t=t.replace(/\u0000(\d+)\u0000/g,(_,i)=>korunan[+i]);
@@ -1194,7 +1195,9 @@ async function aiSor(gorunenSoru, {sistem, on, baslik, ekle}={}){
   sonBaslik = baslik || 'Okul Öncesi · Yıllık Eğitim Planı';
   try{
     let ilk=true; let sonMetin='';
-    sonMetin=await generateText(ctx,{sistem, onChunk:(tam)=>{
+    const bicimKural='BİÇİM KURALI: Yanıtı SADECE düz metin ve basit markdown ile ver (## başlık, **kalın**, - madde işareti, gerekiyorsa tablo). KESİNLİKLE HTML etiketi, <span>, style özniteliği veya #RRGGBB renk kodu yazma. Emoji kullanabilirsin. Türkçe yanıt ver.';
+    const _sistem=(sistem?sistem+'\n\n':'')+bicimKural;
+    sonMetin=await generateText(ctx,{sistem:_sistem, onChunk:(tam)=>{
       if(ilk){ clearInterval(spTimer); ilk=false; }
       ab.innerHTML='<div class="prose">'+md(tam)+'</div>'; kon.scrollTop=kon.scrollHeight;
     }});
@@ -2209,7 +2212,7 @@ function sunumIskele(){ var gi=ST.gradeIdx, tid='bilissel', n=SEANS[tid].length,
 /* Tüm Yıl Planı → PDF */
 function yilPdf(){
   var gi=ST.gradeIdx, sn=SINIF_LISTE[gi], gname=(grupAd(sn.g));
-  var h='<div class="yilbas"><h1>Okul Öncesi · Yıllık Eğitim Planı</h1><h2>'+gname+' — Ebru & Özlem Öğretmen · 2025-2026</h2></div>';
+  var h='<div class="yilbas"><h1>Okul Öncesi · Yıllık Eğitim Planı</h1><h2>'+gname+' — Ebru & Özlem Öğretmen · 2026-2027</h2></div>';
   gorunenTracks(gi).forEach(function(tr){ h+='<h3 style="color:'+tr.dr+'">'+tr.ik+' '+tr.ad+'</h3><ol>'; SEANS[tr.id].forEach(function(se){ h+='<li><b>'+se.k+'</b> — <i>Kazanım:</i> '+se.z+' &nbsp; <i>Etkinlik:</i> '+se.e+'</li>'; }); h+='</ol>'; });
   var ov=document.getElementById('yilPrint'); if(!ov){ ov=document.createElement('div'); ov.id='yilPrint'; document.body.appendChild(ov);} ov.innerHTML=h;
   document.body.classList.add('yazdir-yil'); window.print(); setTimeout(function(){document.body.classList.remove('yazdir-yil');},600);
@@ -2444,7 +2447,7 @@ function progTemizle(){ if(confirm('Tüm program silinsin mi?')){ progSet({}); r
 async function haritaPng(){ try{ toast('🖼️ Görsel hazırlanıyor…','info'); await scriptYukle('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'); var el=document.getElementById('haritaSaha'); var cv=await html2canvas(el,{backgroundColor:'#0b1220',scale:2}); cv.toBlob(function(b){ var a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='zihin-haritasi.png'; a.click(); toast('📥 İndirildi','ok'); }); }catch(e){ toast('Görsel oluşturulamadı (internet gerekli)','err'); } }
 async function haritaPdf(){ try{ toast('📄 PDF hazırlanıyor…','info'); await scriptYukle('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'); await scriptYukle('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js'); var el=document.getElementById('haritaSaha'); var cv=await html2canvas(el,{backgroundColor:'#0b1220',scale:2}); var J=window.jspdf.jsPDF; var pdf=new J('l','mm','a4'); var W=297,H=210,iw=W,ih=cv.height*W/cv.width; if(ih>H){ ih=H; iw=cv.width*H/cv.height; } pdf.setFillColor(11,18,32); pdf.rect(0,0,W,H,'F'); pdf.addImage(cv.toDataURL('image/png'),'PNG',(W-iw)/2,(H-ih)/2,iw,ih); pdf.save('zihin-haritasi.pdf'); toast('📥 İndirildi','ok'); }catch(e){ toast('PDF oluşturulamadı (internet gerekli)','err'); } }
 function ozetPdf(){
-  var h='<div class="yilbas"><h1>Yıl Sonu Özeti — Okul Öncesi</h1><h2>Ebru & Özlem Öğretmen · 2025-2026</h2></div>';
+  var h='<div class="yilbas"><h1>Yıl Sonu Özeti — Okul Öncesi</h1><h2>Ebru & Özlem Öğretmen · 2026-2027</h2></div>';
   SINIF_LISTE.forEach(function(sn,gi){ var gname=(grupAd(sn.g)); h+='<h3>'+gname+' — Genel: %'+gradeYuzde(gi)+'</h3><ol>';
     gorunenTracks(gi).forEach(function(tr){ var n=SEANS[tr.id].length, c=0; for(var i=0;i<n;i++) if(ilrDone(gi,tr.id,i)) c++; h+='<li>'+tr.ik+' '+tr.ad+': %'+trackYuzde(gi,tr.id,n)+' ('+c+'/'+n+' ders)</li>'; });
     h+='</ol>'; });
