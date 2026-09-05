@@ -425,6 +425,23 @@ input[type=date].key{color-scheme:dark}
 .bugun-satir .bs-ic b{font-size:14px}
 .ds-chk{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;background:var(--panel2);border:1px solid var(--cizgi);border-radius:12px;padding:11px}
 .ds-chk .chk{font-size:20px}
+
+/* Aylık Plan */
+.ay-secici{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px}
+.ay-chip{padding:8px 13px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:inherit;cursor:pointer;font-weight:700;font-size:13.5px}
+.ay-bilgi{padding:11px 15px;border-radius:14px;background:linear-gradient(135deg,var(--dr),var(--dr2));color:#fff;font-size:14.5px;margin-bottom:16px}
+.ay-hafta{border:1px solid rgba(255,255,255,.10);border-radius:16px;padding:14px 14px 12px;margin-bottom:16px;background:rgba(255,255,255,.03);position:relative;overflow:hidden}
+.ay-hafta::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:linear-gradient(var(--dr),var(--dr2))}
+.ay-hafta-bas{font-weight:800;font-size:15px;color:#fff;margin:0 0 12px 8px}
+.ay-hno{display:inline-block;background:linear-gradient(135deg,var(--dr),var(--dr2));color:#fff;padding:3px 9px;border-radius:999px;font-size:12px;margin-right:6px}
+.ay-gun-satir{display:grid;grid-template-columns:repeat(5,1fr);gap:9px;padding-left:8px}
+.ay-gun{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:9px 10px;min-width:0}
+.ay-gun-bas{font-weight:800;font-size:12.5px;color:var(--dr2);margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,.08);padding-bottom:5px}
+.ay-gun ul{margin:0;padding-left:15px}
+.ay-gun li{font-size:12px;color:var(--soluk);margin-bottom:4px;line-height:1.35}
+.ay-izle{margin:11px 0 2px 8px}
+@media(max-width:820px){.ay-gun-satir{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.ay-gun-satir{grid-template-columns:1fr}}
 </style>
 
 </head>
@@ -453,6 +470,7 @@ input[type=date].key{color-scheme:dark}
   <div class="seritler" id="seritler">
     <div class="seri aktif" data-v="veli">🏛️ Genel Bakış / Veli Sunumu</div>
     <div class="seri" data-v="plan">📅 Yıllık Plan</div>
+    <div class="seri" data-v="aylik">📅 Aylık Plan</div>
     <div class="seri" data-v="program">🗓️ Program</div>
     <div class="seri" data-v="araclar">🧰 Araç Kütüphanesi</div>
     <div class="seri" data-v="oyun">🎮 Eğitim Oyunları</div>
@@ -473,6 +491,8 @@ input[type=date].key{color-scheme:dark}
     </div>
     <div id="planIzgara"></div>
   </div>
+
+  <div id="v-aylik" style="display:none"></div>
 
   <!-- ARAÇLAR -->
   <div id="v-araclar" style="display:none"></div>
@@ -754,7 +774,7 @@ async function generateText(prompt, {onChunk, sistem}={}){
   } else { zincir=[birincil]; }
   const body={
     contents:[{role:'user',parts:[{text:prompt}]}],
-    generationConfig:{ temperature:0.9, topP:0.95, maxOutputTokens:8192, thinkingConfig:{thinkingBudget:0} }
+    generationConfig:{ temperature:0.9, topP:0.95, maxOutputTokens:24576, thinkingConfig:{thinkingBudget:0} }
   };
   if(sistem){ body.systemInstruction={parts:[{text:sistem}]}; }
   let sonHata='';
@@ -786,7 +806,7 @@ async function generateText(prompt, {onChunk, sistem}={}){
               if(par){ tam+=par; onChunk&&onChunk(tam,par); } }catch(e){}
           }
         }
-        if(tam){ if(bitisNedeni==='MAX_TOKENS' && uzatma<1){ uzatma++; body.generationConfig.maxOutputTokens=16384; deneme--; continue; } if(mi>0 && typeof toast==='function') toast('⚡ Otomatik seçildi: '+model,'ok'); return tam; }
+        if(tam){ if(bitisNedeni==='MAX_TOKENS' && uzatma<2){ uzatma++; body.generationConfig.maxOutputTokens=Math.min((body.generationConfig.maxOutputTokens||24576)*2,49152); deneme--; continue; } if(mi>0 && typeof toast==='function') toast('⚡ Otomatik seçildi: '+model,'ok'); return tam; }
         sonHata='Boş cevap döndü.';
       }catch(e){ sonHata=e.message||'Ağ hatası'; }
     }
@@ -794,17 +814,17 @@ async function generateText(prompt, {onChunk, sistem}={}){
   throw new Error(sonHata||'Cevap alınamadı.');
 }
 async function generateTextNonStream(prompt, sistem, key, model){
-  const body={contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.9,maxOutputTokens:8192}};
+  const body={contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.9,maxOutputTokens:24576}};
   if(sistem) body.systemInstruction={parts:[{text:sistem}]};
   let liste=[]; try{ liste=await modelListesiGetir(false); }catch(e){}
   const zincir = (liste.length ? [model, ...liste.filter(m=>m!==model)] : [model]);
   let sonHata='';
   for(let mi=0; mi<zincir.length; mi++){
     const m=zincir[mi];
-    for(let d2=0; d2<2; d2++){
+    for(let d2=0; d2<3; d2++){
       const url='https://generativelanguage.googleapis.com/v1beta/models/'+m+':generateContent?key='+encodeURIComponent(key);
       const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body)});
-      if(r.ok){ const dd=await r.json(); const tx=(dd?.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join(''); if(mi>0 && tx && typeof toast==='function') toast('⚡ Otomatik seçildi: '+m,'ok'); return tx; }
+      if(r.ok){ const dd=await r.json(); const cand=dd?.candidates?.[0]; const tx=(cand?.content?.parts||[]).map(x=>x.text||'').join(''); if(cand?.finishReason==='MAX_TOKENS' && (body.generationConfig.maxOutputTokens||24576)<49152){ body.generationConfig.maxOutputTokens=Math.min((body.generationConfig.maxOutputTokens||24576)*2,49152); continue; } if(tx){ if(mi>0 && typeof toast==='function') toast('⚡ Otomatik seçildi: '+m,'ok'); return tx; } }
       const t=await r.text().catch(()=> ''); sonHata=hataTurkce(r.status,t);
       if(r.status===404) break;
       if(r.status===429||r.status===503||r.status===500||r.status===502){ await bekle(700*(d2+1)); continue; }
@@ -1514,15 +1534,319 @@ function viewDegis(v){
   var vo=$('#v-oyun'); if(vo) vo.style.display=v==='oyun'?'block':'none';
   var vv=$('#v-video'); if(vv) vv.style.display=v==='video'?'block':'none';
   var vp=$('#v-program'); if(vp) vp.style.display=v==='program'?'block':'none';
+  var va=$('#v-aylik'); if(va) va.style.display=v==='aylik'?'block':'none';
   if(v==='plan'){ renderSiniflar(); renderFiltre(); renderPlan(); }
   if(v==='araclar') renderAraclar();
   if(v==='oyun') renderOyun();
   if(v==='video') renderVideo();
   if(v==='program') renderProgram();
+  if(v==='aylik') renderAylik();
 }
 $$('#seritler .seri').forEach(s=>s.onclick=()=>viewDegis(s.dataset.v));
 $('#araInput').addEventListener('input',e=>{ ST.ara=e.target.value; $('#araX').style.display=e.target.value?'block':'none'; renderPlanGrid(); });
 $('#araX').onclick=()=>{ ST.ara=''; $('#araInput').value=''; $('#araX').style.display='none'; renderPlanGrid(); };
+
+/* ============================================================
+   AYLIK PLAN (Büyük Yaş Grubu · Türkçe) — PDF'ten birebir
+   ============================================================ */
+let AYLIK_AKTIF=0;
+const AYLIK_PLAN=[
+  {ay:'Eylül', ik:'🍎', dr:'#e11d48', dr2:'#fb7185', haftalar:[
+    {tema:'ORYANTASYON / OKULUM / ARKADAŞLARIM', gunler:[
+      ['Pazartesi',['Sohbet: Okulumu tanıyorum','Tanışma oyunu: "Benim adım..."','Sanat: El izi ile okul panosu']],
+      ['Salı',['Kavram: Kırmızı–Sarı','Oyun: Kırmızı–Sarı renk avı','Matematik: 1 sayısına giriş']],
+      ['Çarşamba',['Sohbet: Sınıf kuralları','Drama: Kurallara uyuyorum','Sanat: Kırmızı–Sarı kolaj']],
+      ['Perşembe',['Fen: Temiz eller deneyi (sim ve sabun)','Müzik: Hoş geldin şarkıları','Hareket: Renk komutları oyunu']],
+      ['Cuma',['Hikâye: "İlk Günüm"','Parmak oyunları','Duygu paylaşım çemberi']]
+    ]},
+    {tema:'TEMİZLİK / ŞEKİLLER / BÜYÜK–KÜÇÜK', gunler:[
+      ['Pazartesi',['Sohbet: Temizlik neden önemlidir?','Fen: Mikroplar neden görünmez?','Sanat: Kendimi çiziyorum']],
+      ['Salı',['Kavram: Daire–Kare','Oyun: Daire ve Kare istasyon oyunu','Okuma yazmaya hazırlık: Daire çizme']],
+      ['Çarşamba',['Kavram: Büyük–Küçük','Oyun: Büyük–Küçük eşleştirme','Matematik: Büyük–küçük nesneleri gruplama']],
+      ['Perşembe',['Fen: Canlı ve cansız varlıkları inceleme','Hareket: Büyük adım–küçük adım yürüyüşü','Müzik: Temizlik şarkısı']],
+      ['Cuma',['Sanat: Daire ve kare baskı çalışması','Okuma yazmaya hazırlık: Kare tamamlama','Serbest etkinlik']]
+    ]},
+    {tema:'GENEL PEKİŞTİRME (Çarşamba günü tamamlanır)', gunler:[
+      ['Pazartesi',['Sohbet: Okulumu ve arkadaşlarımı anlatıyorum','Sanat: Okulumu hayal ediyorum resmi','Matematik: Bir tane nesne bulma']],
+      ['Salı',['Okuma yazmaya hazırlık: Çizgi çalışmaları','1 sayısını noktalı çizgiden tamamlama','Müzik: Ritim ve vücut perküsyonu','Oyun: Sınıfı keşfetme']],
+      ['Çarşamba',['Matematik: 2 rakamı ile çalışma','2 sayısını tanıyalım, iki rakamlı nesne sayma','2 sayısını noktalı çizgiden tamamlama','İki grupta 2\u2019şer nesne eşleştirme']]
+    ]}
+  ]},
+  {ay:'Ekim', ik:'🍂', dr:'#ea580c', dr2:'#fb923c', haftalar:[
+    {tema:'EYLÜL AYI TAMAMLAMA (Perşembe–Cuma)', gunler:[
+      ['Perşembe (1 Ekim)',['Aile katılımı etkinliklerinin paylaşılması','Sınıf kurallarını pekiştirme oyunu','Serbest sanat etkinliği']],
+      ['Cuma (2 Ekim)',['Kırmızı–Sarı, Daire–Kare, Büyük–Küçük kavramları tekrar','1 sayısı pekiştirme','Paylaşım çemberi ve Eylül değerlendirmesi']]
+    ]},
+    {tema:'VÜCUDUMU TANIYORUM / ORGANLARIMIZ / BEŞ DUYUMUZ', gunler:[
+      ['Pazartesi (5 Ekim) · Beş Duyumuz',['Duyularımızı tanıyalım','Duyu kartları','Mavi renk etkinliği']],
+      ['Salı (6 Ekim) · Görme–İşitme',['Ses tahmin oyunu','Renk avı','Uzun–Kısa çalışması']],
+      ['Çarşamba (7 Ekim) · Tatma–Koklama',['Tatlı–ekşi etkinliği','Koku tahmin oyunu']],
+      ['Perşembe (8 Ekim) · Dokunma',['Gizem kutusu','Kalın–İnce kavramı']],
+      ['Cuma (9 Ekim) · Tekrar',['İstasyon etkinliği','3 sayısı çalışması']]
+    ]},
+    {tema:'SONBAHAR', gunler:[
+      ['Pazartesi (12 Ekim)',['Sonbaharın özellikleri','Yaprak inceleme']],
+      ['Salı (13 Ekim)',['Turuncu renk çalışması','Yaprak baskısı']],
+      ['Çarşamba (14 Ekim)',['Meyve inceleme','Az–Çok etkinliği']],
+      ['Perşembe (15 Ekim)',['Doğa gözlemi','Üçgen çalışması']],
+      ['Cuma (16 Ekim)',['Sanat etkinliği','2 ve 3 sayıları tekrar']]
+    ]},
+    {tema:'HAYVANLARI KORUMA', gunler:[
+      ['Pazartesi (19 Ekim)',['Evcil hayvanlar','Hayvan sevgisi sohbeti']],
+      ['Salı (20 Ekim)',['Sokak hayvanlarına nasıl yardımcı olabiliriz?','Bir–Çok kavramı']],
+      ['Çarşamba (21 Ekim)',['Hayvan barınakları drama etkinliği','Mavi–Turuncu tekrar']],
+      ['Perşembe (22 Ekim)',['Hayvan hakları hikâye okuma','Üçgen tamamlama']],
+      ['Cuma (23 Ekim)',['Hayvanlar Haftası değerlendirme oyunu','Kavram tekrarı']]
+    ]},
+    {tema:'CUMHURİYET BAYRAMI', gunler:[
+      ['Pazartesi (26 Ekim)',['Atatürk\u2019ü tanıyoruz','Bayrağımız']],
+      ['Salı (27 Ekim)',['Cumhuriyet nedir? sohbet','Bayrak sanat etkinliği']],
+      ['Çarşamba (28 Ekim)',['Bayram hazırlıkları: şarkılar','Gösteri provası']],
+      ['Perşembe (29 Ekim)',['Bayram kutlaması','Şiir ve marşlar']],
+      ['Cuma (30 Ekim)',['Ekim ayı değerlendirme','Kavram tekrarları ve oyunlar']]
+    ]}
+  ]},
+  {ay:'Kasım', ik:'🍁', dr:'#7c3aed', dr2:'#a78bfa', haftalar:[
+    {tema:'AİLEM VE EVİM / YEŞİL–MOR / DİKDÖRTGEN', gunler:[
+      ['Pazartesi',['Sohbet: "Ailem kimlerden oluşur?"','Türkçe: Aile bireylerini tanıtma','Sanat: Aile çizimi','Oyun: Aile rolleri canlandırma']],
+      ['Salı',['Matematik: 4 sayısını tanıma','Kavram: Yeşil renk avı','Oyun: Renk eşleştirme']],
+      ['Çarşamba',['Kavram: Dikdörtgeni tanıma','Sanat: Dikdörtgen çerçeve yapımı','Oyun: Sınıfta dikdörtgen bulma']],
+      ['Perşembe',['Fen: Evimizde kimler ne yapar?','Drama: "Evde bir gün"','Müzik: Aile şarkısı']],
+      ['Cuma',['Değerlendirme: Aile ve ev teması tekrar','Oyun: Hafıza kartları','Serbest etkinlik']]
+    ]},
+    {tema:'ATATÜRK VE 10 KASIM / ÖN–ARKA / AĞIR–HAFİF', gunler:[
+      ['Pazartesi',['Atatürk tanıtımı','Görsel: Atatürk fotoğrafları','Sanat: Atatürk portresi']],
+      ['Salı',['10 Kasım anlamı sohbeti','Drama: Saygı duruşu','Müzik: Atatürk marşı']],
+      ['Çarşamba',['Kavram: Ön–arka','Oyun: Sınıfta yön bulma','Hareket etkinliği']],
+      ['Perşembe',['Kavram: Ağır–hafif','Deney: Nesneleri tartma','Oyun']],
+      ['Cuma',['Değerlendirme','Anma çalışması','Serbest etkinlik']]
+    ]},
+    {tema:'ÖĞRETMENLER GÜNÜ / BESİNLER VE SAĞLIK', gunler:[
+      ['Pazartesi',['Sohbet: Öğretmenlerimizin önemi','Sanat: Teşekkür kartı','Oyun: Öğretmenle ilgili kelime bulma']],
+      ['Salı (24 Kasım)',['Öğretmenler Günü sohbeti','Öğretmen kartı yapımı','Drama: Öğretmen–öğrenci rolü']],
+      ['Çarşamba',['Matematik: 5 rakamını tanıma ve yazma','Oyun: 5 sayısını bulma ve eşleştirme','Sanat: 5 rakamı etkinliği']],
+      ['Perşembe',['Hareket: Sağlıklı yaşam etkinliği','Oyun: Meyve–sebze tanıma','Müzik']],
+      ['Cuma',['Matematik: 5 rakamı tekrar','Oyun: 5\u2019e kadar sayma','Değerlendirme: 5 rakamı eşleştirme']]
+    ]},
+    {tema:'BESİNLER', gunler:[
+      ['Pazartesi',['Sohbet: Sağlıklı beslenme','Oyun: Meyve–sebze eşleştirme','Sanat: Meyve tabağı kolaji']]
+    ]}
+  ]},
+  {ay:'Aralık', ik:'❄️', dr:'#0891b2', dr2:'#22d3ee', haftalar:[
+    {tema:'KASIM AYI TAMAMLAMA (Salı–Cuma)', gunler:[
+      ['Salı',['Besinler: Sağlıklı–sağlıksız yiyecekler','Oyun: Sepet ayırma','Matematik: 4–5 sayıları tekrar']],
+      ['Çarşamba',['Fen: Sağlıklı beslenme','Sanat: Tabak hazırlama kolaji','Hikâye']],
+      ['Perşembe',['Hareket: Sağlıklı yaşam etkinliği','Oyun: Meyve–sebze tanıma','Müzik']],
+      ['Cuma',['Genel tekrar','Ay değerlendirme etkinliği','Serbest oyun']]
+    ]},
+    {tema:'KIŞ MEVSİMİ / SİYAH–BEYAZ / OVAL', gunler:[
+      ['Pazartesi',['Sohbet: Kış mevsiminde neler olur?','Türkçe: Kışa ait kelimeler','Sanat: Kar taneleri kesme']],
+      ['Salı',['Kavram: Siyah–beyaz nesneler','Oyun: Sınıfta siyah–beyaz avı','Matematik: 6 sayısına giriş']],
+      ['Çarşamba',['Fen: Kışın hava durumu','Drama: Kar yağışı canlandırma','Sanat: Kış resmi']],
+      ['Perşembe',['Kavram: Oval şekli tanıma','Oyun: Oval nesne bulma','Sanat: Oval kar tanesi/çerçeve']],
+      ['Cuma',['Değerlendirme','Hikâye saati: Kış masalı','Serbest etkinlik']]
+    ]},
+    {tema:'YENİ YIL / ÖNCE–SONRA / BOŞ–DOLU', gunler:[
+      ['Pazartesi',['Sohbet: Yeni yıl nedir?','Sanat: Yılbaşı süsü yapımı','Müzik: Yeni yıl şarkısı']],
+      ['Salı',['Kavram: Önce–sonra sıralama','Oyun: Günlük rutin sıralama kartları','Türkçe: Hikâye anlatımı']],
+      ['Çarşamba',['Kavram: Boş–dolu','Deney: Bardaklarla boş–dolu','Matematik: 6 sayısı tekrar']],
+      ['Perşembe',['Drama: Yeni yıl hazırlıkları','Sanat: Takvim yapımı','Oyun']],
+      ['Cuma',['Değerlendirme','Serbest etkinlik','Hikâye']]
+    ]},
+    {tema:'TUTUM, YATIRIM VE TÜRK MALLARI / AYNI–FARKLI–BENZER', gunler:[
+      ['Pazartesi',['Sohbet: Yerli malı nedir?','Oyun: Ürünleri sınıflandırma','Sanat: Yerli malı afişi']],
+      ['Salı',['Kavram: Aynı–farklı–benzer','Oyun: Nesne karşılaştırma','Matematik: 6 sayısı etkinliği']],
+      ['Çarşamba',['Fen: Tutumlu olma nedir?','Drama: Tasarruf hikâyesi','Sanat: Kumbara yapımı']],
+      ['Perşembe',['Türkçe: Yerli malı hikâyesi','Oyun: Market oyunu','Müzik']],
+      ['Cuma',['Yerli malı günü etkinliği','Paylaşım ve sunum','Serbest etkinlik']]
+    ]},
+    {tema:'ZAMAN KAVRAMI / GÜNLER-AYLAR-MEVSİMLER (Pazartesi–Perşembe)', gunler:[
+      ['Pazartesi',['Sohbet: Günler nelerdir?','Oyun: Haftanın günleri sıralama','Sanat: Günlük takvim']],
+      ['Salı',['Kavram: Ayları tanıma','Oyun: Ayları sıralama kartları','Türkçe: Hikâye anlatımı']],
+      ['Çarşamba',['Kavram: Mevsimleri tanıma','Oyun: Mevsim eşleştirme','Sanat: Mevsim resmi']],
+      ['Perşembe (Yılbaşı)',['Yılbaşı kutlaması','Parti oyunları','Sanat: Yılbaşı kartı','Müzik']]
+    ]}
+  ]},
+  {ay:'Ocak', ik:'⛄', dr:'#2563eb', dr2:'#60a5fa', haftalar:[
+    {tema:'GÖKYÜZÜ VE UZAY / KIŞ UYKUSU / KAHVERENGİ-GRİ / ELİPS', gunler:[
+      ['Pazartesi',['Sohbet: Gökyüzünde neler var?','Türkçe: Uzay kelimeleri','Sanat: Gezegenler boyama']],
+      ['Salı',['Kavram: Kahverengi–gri renkler','Matematik: 7 sayısına giriş','Oyun: Sınıfta renk avı']],
+      ['Çarşamba',['Fen: Güneş, Ay ve yıldızlar','Drama: Astronot olsak ne yaparız?','Sanat: Roket yapımı']],
+      ['Perşembe',['Sohbet: Kış uykusu nedir?','Fen: Kış uykusuna yatan hayvanlar','Sanat: Kış uykusu yapan hayvanlar']],
+      ['Cuma',['Kavram: Elips','Kavram: Sıcak–Soğuk','Oyun: Elips nesne bulma ve sıcak–soğuk eşleştirme']]
+    ]},
+    {tema:'ENERJİ TASARRUFU / DUYGULAR / GENEL TEKRAR', gunler:[
+      ['Pazartesi',['Sohbet: Enerji nedir?','Fen: Elektriği tasarruflu kullanma','Sanat: Enerji tasarrufu afişi']],
+      ['Salı',['Kavram: Yarım–Tam ve Parça–Bütün','Oyun: Puzzle ve nesne tamamlama','Matematik: 7 sayısı pekiştirme']],
+      ['Çarşamba',['Duygular: Mutlu, Üzgün, Korkmuş, Şaşırmış','Drama: Duygu canlandırma','Sanat: Duygu maskeleri']],
+      ['Perşembe',['Genel tekrar: Uzay, Kış Uykusu, Enerji','Kavram tekrarları (renk, şekil, zıt)','Hikâye ve grup etkinliği']],
+      ['Cuma',['Ay sonu değerlendirme','Serbest etkinlik','Paylaşım çemberi']]
+    ]}
+  ]},
+  {ay:'Şubat', ik:'🚗', dr:'#db2777', dr2:'#f472b6', haftalar:[
+    {tema:'TAŞITLAR VE TRAFİK KURALLARI / PEMBE / KENAR–KÖŞE', gunler:[
+      ['Pazartesi',['Sohbet: Hangi taşıtları biliyoruz?','Türkçe: Taşıt isimleri','Sanat: Taşıt boyama']],
+      ['Salı',['Kavram: Pembe renk','Oyun: Sınıfta pembe nesne avı','Matematik: 8 sayısına giriş']],
+      ['Çarşamba',['Fen: Kara, deniz ve hava taşıtları','Drama: Trafik ışıkları canlandırma','Oyun: Trafik parkuru']],
+      ['Perşembe',['Kavram: Kenar–köşe','Oyun: Şekil bulma etkinliği','Sanat: Geometrik şekillerle taşıt yapımı']],
+      ['Cuma',['Trafik kuralları tekrar','Hikâye: Güvenli Yolculuk','Serbest etkinlik']]
+    ]},
+    {tema:'İLETİŞİM ARAÇLARI / ESKİ–YENİ / SAĞ–SOL', gunler:[
+      ['Pazartesi',['Sohbet: Telefon, televizyon ve tablet ne işe yarar?','Fen: İletişim araçlarının gelişimi','Sanat: Eski ve yeni telefon çizimi']],
+      ['Salı',['Kavram: Eski–yeni','Oyun: Nesneleri sınıflandırma','Matematik: 8 sayısı etkinliği']],
+      ['Çarşamba',['Medya okuryazarlığı: Teknolojik araçların doğru kullanımı','Drama: Telefonla iletişim oyunu','Eğitsel oyun']],
+      ['Perşembe',['Mekân kavramı: Sağ–sol','Oyun: Yönerge oyunu','Hareket etkinliği']],
+      ['Cuma',['İletişim araçları tekrar','Hikâye','Serbest etkinlik']]
+    ]},
+    {tema:'DOĞA OLAYLARI / HIZLI–YAVAŞ / SAĞ–SOL PEKİŞTİRME', gunler:[
+      ['Pazartesi',['Sohbet: Yağmur, kar ve rüzgâr','Fen: Doğa olaylarını gözlemleme','Sanat: Yağmurlu hava resmi']],
+      ['Salı',['Kavram: Hızlı–yavaş','Oyun: Hareketli oyunlar','Matematik: 8 sayısı tekrar']],
+      ['Çarşamba',['Drama: Rüzgâr ve fırtına canlandırması','Müzik: Doğa seslerini dinleme','Eğitsel oyun']],
+      ['Perşembe',['Sağ–sol kavramı pekiştirme','Yönerge oyunları','Hareket etkinliği']],
+      ['Cuma',['Doğa olayları değerlendirme','Hikâye','Serbest etkinlik']]
+    ]},
+    {tema:'GENEL TEKRAR / TRAFİK + MEDYA + DOĞA', gunler:[
+      ['Pazartesi',['Taşıtlar tekrar','Oyun: Trafik kuralları']],
+      ['Salı',['İletişim araçları tekrar','Sanat: Medya kolaji','Matematik: 8 sayısı']],
+      ['Çarşamba',['Doğa olayları tekrar','Drama etkinliği','Hikâye']],
+      ['Perşembe',['Kavram tekrarları: Renk, şekil ve zıt kavramlar','Eğitsel oyun']],
+      ['Cuma',['Ay sonu değerlendirme','Portfolyo ve ürün inceleme','Serbest oyun','Paylaşım çemberi']]
+    ]}
+  ]},
+  {ay:'Mart', ik:'🌷', dr:'#16a34a', dr2:'#4ade80', haftalar:[
+    {tema:'İLKBAHAR MEVSİMİ / AÇIK–KOYU RENK TONLARI', gunler:[
+      ['Pazartesi',['Sohbet: İlkbaharda neler değişir?','Türkçe: İlkbahar kelimeleri','Sanat: Bahar ağacı boyama']],
+      ['Salı',['Kavram: Açık–koyu renk tonları','Oyun: Renk kartlarıyla eşleştirme','Matematik: 9 sayısına giriş']],
+      ['Çarşamba',['Fen: İlkbaharda doğa uyanışı','Drama: Çiçek açma canlandırması','Sanat: Çiçek baskısı']],
+      ['Perşembe',['Kavram: Geometrik şekiller tekrar (daire, kare, üçgen)','Oyun: Şekil bulma','Hareket oyunu']],
+      ['Cuma',['Hikâye: İlkbahar masalı','Serbest etkinlik','Değerlendirme']]
+    ]},
+    {tema:'BİTKİLERİN YAŞAM DÖNGÜSÜ / TOHUM-TOPRAK / ALT-ORTA-ÜST', gunler:[
+      ['Pazartesi',['Sohbet: Bitkiler nasıl büyür?','Fen: Bitki yaşam döngüsü','Sanat: Tohumdan çiçeğe çizim']],
+      ['Salı',['Deney: Tohum ekimi','Kavram: Alt-orta-üst','Oyun: Sınıfta konum bulma']],
+      ['Çarşamba',['Fen: Toprak nedir?','Drama: Tohum olma oyunu','Matematik: 9 sayısı pekiştirme']],
+      ['Perşembe',['Sanat: Saksı tasarımı','Oyun: Bitki büyüme sıralama kartları','Türkçe: Hikâye dinleme']],
+      ['Cuma',['Gözlem etkinliği','Serbest etkinlik','Değerlendirme']]
+    ]},
+    {tema:'ORMAN HAFTASI / SESLİ-SESSİZ / UYANIK-UYKULU', gunler:[
+      ['Pazartesi',['Orman nedir? Sohbet','Fen: Ormandaki canlılar','Sanat: Orman kolaji']],
+      ['Salı',['Kavram: Sesli-sessiz','Oyun: Sesli harf/kelime oyunları','Müzik']],
+      ['Çarşamba',['Kavram: Uyanık-uykulu','Drama: Hayvanların günü','Hikâye']],
+      ['Perşembe',['Orman koruma bilinci','Oyun: Doğa temizliği canlandırma','Sanat']],
+      ['Cuma',['Orman Haftası etkinliği','Serbest oyun','Değerlendirme']]
+    ]},
+    {tema:'KÜTÜPHANELER HAFTASI / KİTAPLAR', gunler:[
+      ['Pazartesi',['Kütüphane nedir?','Kitap inceleme etkinliği','Sanat: Kitap ayracı yapımı']],
+      ['Salı',['Kavram tekrar: açık-koyu, şekiller','Oyun: Kavram bingo','Matematik: 9 sayısı tekrar']],
+      ['Çarşamba',['Hikâye saati','Drama: Hikâye canlandırma','Oyun']]
+    ]}
+  ]},
+  {ay:'Nisan', ik:'🪁', dr:'#c026d3', dr2:'#e879f9', haftalar:[
+    {tema:'KÜTÜPHANELER HAFTASI DEVAMI (Perşembe–Cuma)', gunler:[
+      ['Perşembe',['Kütüphane gezisi (varsa)','Kitap seçme etkinliği','Sessiz okuma']],
+      ['Cuma',['Ay sonu değerlendirme','Serbest etkinlik','Paylaşım çemberi']]
+    ]},
+    {tema:'DÜNYAMIZ VE GEZEGENLER / RENK VE ŞEKİL SENTEZİ', gunler:[
+      ['Pazartesi',['Sohbet: Dünya nedir, nerede yaşarız?','Türkçe: Gezegen isimlerine giriş','Sanat: Dünya kolaji']],
+      ['Salı',['Fen: Güneş sistemi tanıtımı','Oyun: Gezegen sıralama','Matematik: 10 sayısına giriş']],
+      ['Çarşamba',['Kavram: Renk sentezi','Deney: Renk karıştırma','Sanat: "Benim gezegenim" çizimi']],
+      ['Perşembe',['Kavram: Şekillerin tekrarı','Oyun: Şekil avı','Hareket etkinliği']],
+      ['Cuma',['Hikâye: Uzay yolculuğu','Serbest etkinlik','Değerlendirme']]
+    ]},
+    {tema:'ÇEVRE KİRLİLİĞİ VE GERİ DÖNÜŞÜM / GENİŞ-DAR / DERİN-SIĞ', gunler:[
+      ['Pazartesi',['Sohbet: Çevre kirliliği nedir?','Fen: Doğayı koruma yolları','Sanat: Temiz-kirli doğa resmi']],
+      ['Salı',['Kavram: Geniş-dar','Oyun: Nesne karşılaştırma','Matematik: 10\u2019arlı ritmik saymaya giriş']],
+      ['Çarşamba',['Kavram: Derin-sığ','Deney: Su kaplarıyla gözlem','Oyun']],
+      ['Perşembe',['Geri dönüşüm kutuları tanıtımı','Oyun: Atık ayrıştırma','Sanat: Geri dönüşüm çalışması']],
+      ['Cuma',['Hikâye: Doğayı koruyan çocuk','Serbest etkinlik','Değerlendirme']]
+    ]},
+    {tema:'23 NİSAN ULUSAL EGEMENLİK VE ÇOCUK BAYRAMI', gunler:[
+      ['Pazartesi',['23 Nisan\u2019ın anlamı sohbeti','Türkçe: Bayram kelimeleri','Sanat: Türk bayrağı çalışması']],
+      ['Salı',['Atatürk ve çocuk sevgisi','Drama: Meclis canlandırma','Müzik: 23 Nisan şarkıları']],
+      ['Çarşamba',['Bayram hazırlıkları','Süsleme çalışmaları','Oyun: Bayram yürüyüşü']],
+      ['Perşembe',['Genel prova etkinlikleri','Şiir ve dans çalışmaları','Sanat']],
+      ['Cuma',['23 Nisan kutlama etkinliği','Oyun ve serbest etkinlik','Paylaşım çemberi']]
+    ]},
+    {tema:'10 SAYISI VE 10\u2019ARLI RİTMİK SAYMA / GENEL TEKRAR', gunler:[
+      ['Pazartesi',['10 sayısının tanıtımı','Nesnelerle sayma etkinliği','Oyun']],
+      ['Salı',['10\u2019arlı ritmik sayma (10-20-30...)','Hareketli sayma oyunu','Sanat']],
+      ['Çarşamba',['Tüm kavramlar tekrar (renk, şekil, karşılaştırma)','Oyun: Kavram bingo','Matematik']],
+      ['Perşembe',['Gezegenler + çevre tekrar','Hikâye saati','Serbest etkinlik']],
+      ['Cuma',['Ay sonu değerlendirme','Grup oyunları','Paylaşım çemberi']]
+    ]}
+  ]},
+  {ay:'Mayıs', ik:'🌊', dr:'#0284c7', dr2:'#38bdf8', haftalar:[
+    {tema:'YAZ MEVSİMİ / DENİZ CANLILARI', gunler:[
+      ['Pazartesi',['Sohbet: Yaz mevsiminde neler değişir?','Türkçe: Yaz kelime çalışması','Sanat: Güneş ve deniz resmi']],
+      ['Salı',['Fen: Deniz canlıları tanıtımı','Oyun: Deniz hayvanları eşleştirme','Matematik: 1–10 nesne sayma tekrar']],
+      ['Çarşamba',['Kavram: Yön ve mekânda konum (sağ–sol, ön–arka)','Oyun: Yönerge oyunu','Hareket etkinliği']],
+      ['Perşembe',['Sanat: Deniz altı kolaji','Drama: Deniz altında yaşam','Müzik']],
+      ['Cuma',['Hikâye: Yaz tatili','Serbest etkinlik','Değerlendirme']]
+    ]},
+    {tema:'GÖÇMEN KUŞLAR / YAZ DOĞASI', gunler:[
+      ['Pazartesi',['Sohbet: Göçmen kuşlar nedir?','Fen: Kuşların yaşamı','Sanat: Kuş yapımı']],
+      ['Salı',['Kavram: Sıralama ve tekrar (önce–sonra)','Oyun: Kuş göç yolu oyunu','Matematik: 1–10 sayma pekiştirme']],
+      ['Çarşamba',['Fen: Yaz doğası gözlemi','Drama: Kuş olma canlandırması','Oyun']],
+      ['Perşembe',['Sanat: Gökyüzü çalışması','Hareket: Uçma oyunu','Müzik']],
+      ['Cuma',['Hikâye saati','Serbest etkinlik','Değerlendirme']]
+    ]},
+    {tema:'BİLİM VE İCATLAR / İLGİNÇ DENEYLER', gunler:[
+      ['Pazartesi',['Sohbet: İcat nedir?','Fen: Basit icatlar tanıtımı','Sanat: "Benim icadım"']],
+      ['Salı',['Deney: Su ve nesne deneyleri','Matematik: 1–10 toplama (somut nesnelerle)','Oyun']],
+      ['Çarşamba',['Kavram: Az–çok, önce–sonra tekrar','Drama: Bilim insanı olma','Oyun']],
+      ['Perşembe',['Fen: Hareket eden nesneler','Sanat: Robot yapımı','Müzik']],
+      ['Cuma',['Deney günü','Serbest etkinlik','Değerlendirme']]
+    ]},
+    {tema:'TOPLAMA–ÇIKARMA (Somut Nesnelerle) / TEKRAR', gunler:[
+      ['Pazartesi',['Nesnelerle toplama çalışması','Oyun: Nesne ekleme çıkarma','Sanat']],
+      ['Salı',['Nesnelerle çıkarma','Hikâye ile matematik','Oyun']],
+      ['Çarşamba',['Yön ve mekân tekrar','Hareket etkinliği','Matematik: 1–10 pekiştirme']],
+      ['Perşembe',['Tüm kavramlar tekrar','Kavram bingo','Serbest etkinlik']],
+      ['Cuma',['Ay sonu değerlendirme','Oyun günü','Paylaşım']]
+    ]}
+  ]},
+  {ay:'Haziran', ik:'🏖️', dr:'#f59e0b', dr2:'#fbbf24', haftalar:[
+    {tema:'İLKOKULA HAZIRLIK', gunler:[
+      ['Pazartesi',['Sohbet: İlkokul nedir?','Türkçe: Duygu paylaşımı','Sanat: Okul hayalim']],
+      ['Salı',['Yazı hazırlık çalışmaları','İnce motor oyunları','Sanat etkinliği tekrar']],
+      ['Çarşamba',['Duygular: Mutlu-heyecanlı-üzgün','Drama: Vedalaşma oyunu','Müzik']],
+      ['Perşembe',['Sınıf hatırası hazırlama','Albüm çalışması','Oyun']],
+      ['Cuma',['Yıl sonu gösterisi hazırlığı','Serbest etkinlik','Paylaşım çemberi']]
+    ]},
+    {tema:'BAHÇE ETKİNLİKLERİ / DOĞA OYUNLARI', gunler:[
+      ['Pazartesi',['Sohbet: Bahçede neler gözlemleriz?','Fen: Doğadaki canlılar','Sanat: Yaprak baskısı']],
+      ['Salı',['Bahçe oyunları','Hareket parkuru','Matematik: Doğadaki nesneleri sayma']],
+      ['Çarşamba',['Doğa gözlem yürüyüşü','Oyun: Hazine avı','Müzik']],
+      ['Perşembe',['Kum ve su oyunları','Serbest keşif etkinliği','Drama']],
+      ['Cuma',['Piknik etkinliği (uygunsa)','Hikâye saati','Değerlendirme']]
+    ]},
+    {tema:'GELENEKSEL ÇOCUK OYUNLARI / HAREKET EĞİTİMİ', gunler:[
+      ['Pazartesi',['Yıl boyunca öğrendiklerimiz','Oyun: Mendil kapmaca','Raket etkinliği']],
+      ['Salı',['İp atlama','Denge çalışmaları','Matematik: Sayarak ilerleme']],
+      ['Çarşamba',['Sınıf oyunları','Müzik ve dans','Müzik']],
+      ['Perşembe',['Top oyunları','İş birliği oyunları','Serbest oyun']],
+      ['Cuma',['Oyun şenliği','Madalya/katılım belgesi hazırlama','Paylaşım çemberi']]
+    ]}
+  ]}
+];
+
+function ayGoster(i){ AYLIK_AKTIF=i; renderAylik(); try{ document.getElementById('v-aylik').scrollTop=0; }catch(e){} }
+function renderAylik(){
+  const host=document.getElementById('v-aylik'); if(!host) return;
+  if(AYLIK_AKTIF==null||AYLIK_AKTIF>=AYLIK_PLAN.length) AYLIK_AKTIF=0;
+  const m=AYLIK_PLAN[AYLIK_AKTIF];
+  const chips=AYLIK_PLAN.map((x,i)=>{const akt=i===AYLIK_AKTIF;
+    return '<button class="ay-chip'+(akt?' akt':'')+'" onclick="ayGoster('+i+')" style="'+(akt?'background:linear-gradient(135deg,'+x.dr+','+x.dr2+');color:#fff;border-color:transparent':'')+'">'+x.ik+' '+x.ay+'</button>';
+  }).join('');
+  const haftalar=m.haftalar.map((h,hi)=>{
+    const gunler=h.gunler.map(g=>'<div class="ay-gun"><div class="ay-gun-bas">'+g[0]+'</div><ul>'+g[1].map(x=>'<li>'+x+'</li>').join('')+'</ul></div>').join('');
+    const izle='<a class="arac-cip" href="https://www.youtube.com/results?search_query='+encodeURIComponent(h.tema.split('/')[0]+' okul öncesi etkinlik')+'" target="_blank" rel="noopener"><span class="ik">🎬</span>İzle & Kaynak</a>';
+    return '<div class="ay-hafta" style="--dr:'+m.dr+';--dr2:'+m.dr2+'"><div class="ay-hafta-bas"><span class="ay-hno">'+(hi+1)+'. Hafta</span> '+h.tema+'</div><div class="ay-gun-satir">'+gunler+'</div><div class="ay-izle">'+izle+'</div></div>';
+  }).join('');
+  host.innerHTML='<div class="ay-secici">'+chips+'</div>'
+    +'<div class="ay-bilgi" style="--dr:'+m.dr+';--dr2:'+m.dr2+'">'+m.ik+' <b>'+m.ay+' Ayı Günlük Eğitim Planı</b> · Büyük Yaş Grubu (3-6) · '+m.haftalar.length+' hafta</div>'
+    +'<div class="ay-govde">'+haftalar+'</div>';
+}
 
 function basla(){
   renderVeli(); renderAraclar(); renderFiltre(); renderSiniflar();
